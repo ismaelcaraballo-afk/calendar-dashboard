@@ -97,9 +97,10 @@ calendar-dashboard/
     │   ├── credentials.service.ts
     │   └── dto/
     │       └── credential.dto.ts
-    └── web/app/settings/security/      ← Member 5
-        └── connected-apps/
-            ├── page.tsx
-            └── components/
-                └── CredentialCard.tsx
+    └── web/
+        ├── app/(use-page-wrapper)/settings/(settings-layout)/security/
+        │   └── connected-apps/
+        │       └── page.tsx            ← Member 5 (thin route wrapper)
+        └── modules/settings/security/
+            └── connected-apps-view.tsx ← Member 5 (all logic lives here)
 ```
