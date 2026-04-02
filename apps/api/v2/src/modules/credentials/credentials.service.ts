@@ -3,7 +3,7 @@
 
 import { Injectable, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { revokeCredential } from "../../../../packages/revocation/providers";
+import { revokeCredential as revokeOnProvider } from "../../../../packages/revocation/providers";
 import { CredentialResponseDto } from "./dto/credential.dto";
 
 const STALE_DAYS = 30;
@@ -12,25 +12,58 @@ const STALE_DAYS = 30;
 export class CredentialsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Member 2: implement this
-  // TODO:
-  //   1. Query the Credential table for all rows where userId = userId
-  //   2. For each row, compute isStale:
-  //      - true if lastUsedAt is null OR lastUsedAt < 30 days ago
-  //   3. Return array of CredentialResponseDto
+  // Member 2: GET /api/v2/credentials
+  // Returns all connected app credentials for the authenticated user,
+  // with a computed isStale flag indicating connection health.
   async getCredentialsForUser(userId: number): Promise<CredentialResponseDto[]> {
-    throw new Error("TODO: Member 2 — implement getCredentialsForUser");
+    const credentials = await this.prisma.credential.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        type: true,
+        appId: true,
+        lastUsedAt: true,
+      },
+    });
+
+    const staleThreshold = new Date();
+    staleThreshold.setDate(staleThreshold.getDate() - STALE_DAYS);
+
+    return credentials.map((c) => ({
+      id: c.id,
+      type: c.type,
+      appId: c.appId,
+      lastUsedAt: c.lastUsedAt,
+      // Stale if never used, or last used more than STALE_DAYS ago
+      isStale: c.lastUsedAt === null || c.lastUsedAt < staleThreshold,
+    }));
   }
 
-  // Member 3: implement this
-  // TODO:
-  //   1. Find the credential by id
-  //   2. Check that credential.userId === userId — throw ForbiddenException if not
-  //      (IMPORTANT: users can only revoke their own credentials)
-  //   3. Call revokeCredential(credential) to revoke on the provider side (Member 4)
-  //   4. Delete the credential row from the DB
-  //   5. Return { success: true, message: "Credential revoked" }
+  // Member 3: DELETE /api/v2/credentials/:id
+  // Revokes a connected app: verifies ownership, calls provider revocation,
+  // then removes the credential row from the database.
   async revokeCredential(credentialId: number, userId: number) {
-    throw new Error("TODO: Member 3 — implement revokeCredential");
+    const credential = await this.prisma.credential.findUnique({
+      where: { id: credentialId },
+    });
+
+    if (!credential) {
+      throw new NotFoundException(`Credential ${credentialId} not found`);
+    }
+
+    // Security guard: users may only revoke their own credentials
+    if (credential.userId !== userId) {
+      throw new ForbiddenException("You do not own this credential");
+    }
+
+    // Notify the external provider (Google, Zoom, Stripe, etc.)
+    // This is fire-and-forget from a UX perspective — the local delete
+    // proceeds even if the remote call fails (handled inside each provider).
+    await revokeOnProvider(credential);
+
+    // Remove the credential from the database
+    await this.prisma.credential.delete({ where: { id: credentialId } });
+
+    return { success: true, message: "Credential revoked" };
   }
 }
