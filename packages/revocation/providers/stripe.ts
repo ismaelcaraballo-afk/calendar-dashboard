@@ -9,5 +9,7 @@
 //   3. Return cleanly
 
 export async function revokeStripe(credential: { key: any }) {
-  throw new Error("TODO: Member 4 — implement revokeStripe (local only, no HTTP call)");
+  console.log("[revocation][stripe] disconnected credential", {
+    hasKey: Boolean(credential?.key),
+  });
 }
