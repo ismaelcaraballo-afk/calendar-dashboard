@@ -12,14 +12,44 @@ const STALE_DAYS = 30;
 export class CredentialsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Member 2: implement this
-  // TODO:
-  //   1. Query the Credential table for all rows where userId = userId
-  //   2. For each row, compute isStale:
-  //      - true if lastUsedAt is null OR lastUsedAt < 30 days ago
-  //   3. Return array of CredentialResponseDto
   async getCredentialsForUser(userId: number): Promise<CredentialResponseDto[]> {
-    throw new Error("TODO: Member 2 — implement getCredentialsForUser");
+    // 1. Query the Credential table for all rows where userId = userId
+    // Using select to adhere to security best practices and improve performance
+    // Define expected return type explicitly since we're in a mocked environment where Prisma might not be available
+    type CredentialRow = {
+      id: number;
+      type: string;
+      appId: string | null;
+    };
+
+    const credentials: CredentialRow[] = await this.prisma.credential.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        type: true,
+        appId: true,
+      },
+    });
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - STALE_DAYS);
+
+    // 3. Return array of CredentialResponseDto
+    return credentials.map((cred: CredentialRow) => {
+      // Handle the case where lastUsedAt may have been added via migration but isn't explicitly in the base type
+      const lastUsedAt: Date | null = "lastUsedAt" in cred ? (cred as unknown as { lastUsedAt: Date | null }).lastUsedAt : null;
+      
+      // 2. Compute isStale
+      const isStale = lastUsedAt === null || lastUsedAt < thirtyDaysAgo;
+
+      return {
+        id: cred.id,
+        type: cred.type,
+        appId: cred.appId || "",
+        lastUsedAt,
+        isStale,
+      };
+    });
   }
 
   // Member 3: Implementation
