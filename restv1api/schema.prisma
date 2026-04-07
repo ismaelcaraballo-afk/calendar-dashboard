@@ -1,0 +1,24 @@
+// packages/prisma/schema.prisma
+// ─────────────────────────────────────────────────────────────
+// CHANGE: Added `lastUsedAt` field to the ApiKey model.
+//
+// This is the only schema change required for Option 1.
+// The field is nullable — existing keys will read NULL until
+// their next authenticated v1 request stamps them.
+// ─────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     Int
+  note       String?
+  hashedKey  String    @unique
+  expiresAt  DateTime?
+  lastUsedAt DateTime?          // ← NEW: stamped on every v1 request
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastUsedAt])          // ← NEW: index for stale-key queries
+}

@@ -3,11 +3,9 @@
 // is an API key, not an OAuth token.
 // Disconnecting means removing it locally only.
 
-// TODO:
-//   1. Log that Stripe was disconnected
-//   2. No external HTTP call needed for Stripe
-//   3. Return cleanly
-
 export async function revokeStripe(credential: { key: any }) {
-  throw new Error("TODO: Member 4 — implement revokeStripe (local only, no HTTP call)");
+  // No external HTTP call needed for Stripe.
+  // Removing the credential row in the DB is sufficient to
+  // disconnect the integration — the key simply stops being used.
+  console.log("[revocation] revokeStripe: Stripe credential disconnected (local only, no HTTP call)");
 }
