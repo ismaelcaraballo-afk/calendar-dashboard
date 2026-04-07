@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 
-import { useLocale } from "@calcom/lib/hooks/useLocale";
-import type { RouterOutputs } from "@calcom/trpc/react";
 import { trpc } from "@calcom/trpc/react";
 import { Badge } from "@calcom/ui/components/badge";
 import { Button } from "@calcom/ui/components/button";
@@ -12,9 +10,11 @@ import { EmptyScreen } from "@calcom/ui/components/empty-screen";
 import { SkeletonButton, SkeletonContainer, SkeletonText } from "@calcom/ui/components/skeleton";
 import { showToast } from "@calcom/ui/components/toast";
 
-type IntegrationItem = RouterOutputs["viewer"]["apps"]["integrations"]["items"][number];
+type IntegrationItem = NonNullable<ReturnType<typeof useIntegrations> extends { data: infer T } ? T : never>[number];
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
+function useIntegrations() {
+  return trpc.viewer.apps.integrations.useQuery({ onlyInstalled: true });
+}
 
 const SkeletonLoader = () => (
   <SkeletonContainer>
@@ -34,8 +34,6 @@ const SkeletonLoader = () => (
     </div>
   </SkeletonContainer>
 );
-
-// ─── Single app row ───────────────────────────────────────────────────────────
 
 function CredentialRow({
   app,
@@ -78,34 +76,28 @@ function CredentialRow({
   );
 }
 
-// ─── Main view ────────────────────────────────────────────────────────────────
-
 export default function ConnectedAppsView() {
-  const { t } = useLocale();
   const utils = trpc.useUtils();
   const [revoking, setRevoking] = useState<{ id: number; appName: string } | null>(null);
 
-  const { data, isPending } = trpc.viewer.apps.integrations.useQuery({ onlyInstalled: true });
+  const { data, isPending } = useIntegrations();
 
   const mutation = trpc.viewer.credentials.delete.useMutation({
     onSuccess: () => {
-      showToast(t("app_removed_successfully"), "success");
+      showToast("App revoked", "success");
       setRevoking(null);
       utils.viewer.apps.integrations.invalidate();
       utils.viewer.calendars.connectedCalendars.invalidate();
     },
     onError: () => {
-      showToast(t("error_removing_app"), "error");
+      showToast("Failed to revoke app", "error");
       setRevoking(null);
     },
   });
 
   if (isPending) return <SkeletonLoader />;
 
-  // Flatten: one row per credential across all installed apps
-  const rows = data?.items.flatMap((app) =>
-    (app.credentials ?? []).map((cred) => ({ app, credentialId: cred.id }))
-  ) ?? [];
+  const rows = data?.items.flatMap((app) => (app.credentials ?? []).map((cred) => ({ app, credentialId: cred.id }))) ?? [];
 
   return (
     <>
@@ -119,12 +111,7 @@ export default function ConnectedAppsView() {
         ) : (
           <div className="divide-subtle divide-y">
             {rows.map(({ app, credentialId }) => (
-              <CredentialRow
-                key={credentialId}
-                app={app}
-                credentialId={credentialId}
-                onRevoke={(id, appName) => setRevoking({ id, appName })}
-              />
+              <CredentialRow key={credentialId} app={app} credentialId={credentialId} onRevoke={(id, appName) => setRevoking({ id, appName })} />
             ))}
           </div>
         )}

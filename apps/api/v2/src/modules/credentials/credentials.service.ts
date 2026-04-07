@@ -12,25 +12,32 @@ const STALE_DAYS = 30;
 export class CredentialsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Member 2: implement this
-  // TODO:
-  //   1. Query the Credential table for all rows where userId = userId
-  //   2. For each row, compute isStale:
-  //      - true if lastUsedAt is null OR lastUsedAt < 30 days ago
-  //   3. Return array of CredentialResponseDto
   async getCredentialsForUser(userId: number): Promise<CredentialResponseDto[]> {
-    throw new Error("TODO: Member 2 — implement getCredentialsForUser");
+    const creds = await this.prisma.credential.findMany({
+      where: { userId },
+      select: { id: true, type: true, appId: true, lastUsedAt: true },
+      orderBy: { id: "asc" },
+    });
+
+    const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
+
+    return creds.map((c) => ({
+      id: c.id,
+      type: c.type,
+      appId: c.appId ?? null,
+      lastUsedAt: c.lastUsedAt ?? null,
+      isStale: !c.lastUsedAt || c.lastUsedAt < cutoff,
+    }));
   }
 
-  // Member 3: implement this
-  // TODO:
-  //   1. Find the credential by id
-  //   2. Check that credential.userId === userId — throw ForbiddenException if not
-  //      (IMPORTANT: users can only revoke their own credentials)
-  //   3. Call revokeCredential(credential) to revoke on the provider side (Member 4)
-  //   4. Delete the credential row from the DB
-  //   5. Return { success: true, message: "Credential revoked" }
   async revokeCredential(credentialId: number, userId: number) {
-    throw new Error("TODO: Member 3 — implement revokeCredential");
+    const credential = await this.prisma.credential.findUnique({ where: { id: credentialId } });
+    if (!credential) throw new NotFoundException("Credential not found");
+    if (credential.userId !== userId) throw new ForbiddenException("Not your credential");
+
+    await revokeCredential(credential);
+    await this.prisma.credential.delete({ where: { id: credentialId } });
+
+    return { success: true, message: "Credential revoked" };
   }
 }
