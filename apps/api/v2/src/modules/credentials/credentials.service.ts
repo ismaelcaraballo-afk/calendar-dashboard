@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { CredentialsRepository } from "./credentials.repository";
 import { revokeCredential } from "@calcom/revocation/providers";
 import type { CredentialResponseDto } from "./dto/credential-response.dto";
@@ -7,6 +7,8 @@ const STALE_DAYS = 30;
 
 @Injectable()
 export class CredentialsService {
+  private readonly logger = new Logger(CredentialsService.name);
+
   constructor(private readonly credentialsRepo: CredentialsRepository) {}
 
   // Member 2: GET /api/v2/credentials
@@ -16,7 +18,7 @@ export class CredentialsService {
     const creds = await this.credentialsRepo.getAllUserCredentialsById(userId);
     const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
 
-    return credentials.map((c) => ({
+    return creds.map((c) => ({
       id: c.id,
       type: c.type,
       appId: c.appId ?? null,
@@ -35,12 +37,20 @@ export class CredentialsService {
     const credential = await this.credentialsRepo.findCredentialByIdAndUserId(credentialId, userId);
     if (!credential) throw new NotFoundException("Credential not found");
 
-    await revokeCredential(credential);
+    try {
+      await revokeCredential(credential);
+    } catch (providerError) {
+      // Provider is down or refused — log but don't block local cleanup.
+      // The user should never be trapped by external downtime.
+      this.logger.warn(
+        `Provider revocation failed for credential ${credentialId} — forcing local delete anyway: ${providerError}`
+      );
+    }
+
     await this.credentialsRepo.deleteUserCredentialById(userId, credentialId);
 
-    // Audit trail
-    console.log(
-      `[AUDIT_LOG_EMITTED]: User ${userId} successfully revoked and deleted credential ${credentialId} at ${new Date().toISOString()}`
+    this.logger.log(
+      `[AUDIT] User ${userId} revoked credential ${credentialId} at ${new Date().toISOString()}`
     );
 
     return { success: true, message: "Credential revoked" };

@@ -1,5 +1,5 @@
-import { Controller, Get, Delete, Param, UseGuards } from "@nestjs/common";
-import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Controller, Get, Delete, Param, ParseIntPipe, UseGuards } from "@nestjs/common";
+import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "@/modules/auth/guards/jwt-auth.guard";
 import { GetUser } from "@/modules/auth/decorators/get-user.decorator";
 import { CredentialsService } from "./credentials.service";
@@ -19,7 +19,10 @@ export class CredentialsController {
   }
 
   @Delete(":id")
-  async revokeCredential(@Param("id") credentialId: number, @GetUser("id") userId: number) {
-    return this.credentialsService.revokeCredential(Number(credentialId), userId);
+  @ApiOperation({ summary: "Revoke a connected credential" })
+  @ApiParam({ name: "id", type: Number, description: "Credential ID to revoke" })
+  @ApiOkResponse({ description: "Credential revoked successfully" })
+  async revokeCredential(@Param("id", ParseIntPipe) credentialId: number, @GetUser("id") userId: number) {
+    return this.credentialsService.revokeCredential(credentialId, userId);
   }
 }
