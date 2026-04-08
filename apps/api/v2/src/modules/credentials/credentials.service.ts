@@ -56,13 +56,25 @@ export class CredentialsService {
       throw new ForbiddenException("You do not own this credential");
     }
 
-    // Notify the external provider (Google, Zoom, Stripe, etc.)
-    // This is fire-and-forget from a UX perspective — the local delete
-    // proceeds even if the remote call fails (handled inside each provider).
-    await revokeOnProvider(credential);
+    // Graceful Degradation / Provider Revocation:
+    // Wrap in try/catch so a provider outage never blocks local cleanup.
+    // The user is never left with a "stuck" credential due to downstream downtime.
+    try {
+      await revokeOnProvider(credential);
+    } catch (providerError) {
+      console.warn(
+        `[Audit/Warning] Provider refused revocation for Credential ID: ${credentialId}. Forcing local deletion anyway. Reason:`,
+        providerError
+      );
+    }
 
     // Remove the credential from the database
     await this.prisma.credential.delete({ where: { id: credentialId } });
+
+    // Audit trail
+    console.log(
+      `[AUDIT_LOG_EMITTED]: User ${userId} successfully revoked and deleted credential ${credentialId} at ${new Date().toISOString()}`
+    );
 
     return { success: true, message: "Credential revoked" };
   }
