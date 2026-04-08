@@ -5,6 +5,13 @@ import type { CredentialResponseDto } from "./dto/credential-response.dto";
 
 const STALE_DAYS = 30;
 
+interface CredentialRow {
+  id: number;
+  type: string;
+  appId?: string | null;
+  lastUsedAt?: Date | null;
+}
+
 @Injectable()
 export class CredentialsService {
   private readonly logger = new Logger(CredentialsService.name);
@@ -18,16 +25,16 @@ export class CredentialsService {
     const creds = await this.credentialsRepo.getAllUserCredentialsById(userId);
     const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
 
-    return creds.map((c) => ({
-      id: c.id,
-      type: c.type,
-      appId: c.appId ?? null,
-      lastUsedAt: "lastUsedAt" in c ? (c as { lastUsedAt: Date | null }).lastUsedAt ?? null : null,
-      isStale:
-        "lastUsedAt" in c && (c as { lastUsedAt: Date | null }).lastUsedAt
-          ? (c as { lastUsedAt: Date | null }).lastUsedAt < cutoff
-          : true,
-    }));
+    return (creds as CredentialRow[]).map((c) => {
+      const lastUsedAt = c.lastUsedAt ?? null;
+      return {
+        id: c.id,
+        type: c.type,
+        appId: c.appId ?? null,
+        lastUsedAt,
+        isStale: !lastUsedAt || lastUsedAt < cutoff,
+      };
+    });
   }
 
   // Member 3: DELETE /api/v2/credentials/:id

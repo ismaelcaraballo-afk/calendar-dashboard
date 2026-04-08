@@ -72,4 +72,23 @@ describe("CredentialsService", () => {
 
     await expect(service.revokeCredential(999, 1)).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it("still deletes locally when provider revocation throws", async () => {
+    repo.findCredentialByIdAndUserId.mockResolvedValue({
+      id: 5,
+      type: "google_calendar",
+      key: { access_token: "tok" },
+    } as unknown as Awaited<ReturnType<CredentialsRepository["findCredentialByIdAndUserId"]>>);
+    (revokeCredential as jest.Mock).mockRejectedValue(new Error("Google 503"));
+    repo.deleteUserCredentialById.mockResolvedValue(undefined as never);
+
+    // Should not throw — graceful degradation
+    await expect(service.revokeCredential(5, 1)).resolves.toEqual({
+      success: true,
+      message: "Credential revoked",
+    });
+
+    // Local delete must still happen even though provider failed
+    expect(repo.deleteUserCredentialById).toHaveBeenCalledWith(1, 5);
+  });
 });
