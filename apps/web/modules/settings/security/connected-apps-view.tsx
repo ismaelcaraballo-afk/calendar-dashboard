@@ -10,7 +10,8 @@ import { EmptyScreen } from "@calcom/ui/components/empty-screen";
 import { SkeletonButton, SkeletonContainer, SkeletonText } from "@calcom/ui/components/skeleton";
 import { showToast } from "@calcom/ui/components/toast";
 
-type IntegrationItem = NonNullable<ReturnType<typeof useIntegrations> extends { data: infer T } ? T : never>[number];
+type IntegrationsData = NonNullable<ReturnType<typeof useIntegrations>["data"]>;
+type IntegrationItem = IntegrationsData["items"][number];
 
 function useIntegrations() {
   return trpc.viewer.apps.integrations.useQuery({ onlyInstalled: true });
@@ -46,7 +47,7 @@ function CredentialRow({
 }) {
   const categoryLabel = app.type
     .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/\b\w/g, (c: string) => c.toUpperCase())
     .replace(/ (Calendar|Video|Payment|Crm|Automation)$/i, "");
 
   return (
@@ -97,7 +98,12 @@ export default function ConnectedAppsView() {
 
   if (isPending) return <SkeletonLoader />;
 
-  const rows = data?.items.flatMap((app) => (app.credentials ?? []).map((cred) => ({ app, credentialId: cred.id }))) ?? [];
+  const rows =
+    data?.items.flatMap((app) => {
+      const personal = app.userCredentialIds.map((id) => ({ app, credentialId: id }));
+      const team = (app.teams ?? []).flatMap((t) => (t ? [{ app, credentialId: t.credentialId }] : []));
+      return [...personal, ...team];
+    }) ?? [];
 
   return (
     <>
