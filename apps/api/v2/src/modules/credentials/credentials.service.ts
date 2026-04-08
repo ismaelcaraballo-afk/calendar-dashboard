@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { CredentialsRepository } from "./credentials.repository";
 import { revokeCredential } from "@calcom/revocation/providers";
+import type { CredentialResponseDto } from "./dto/credential-response.dto";
 
 const STALE_DAYS = 30;
 
@@ -8,7 +9,7 @@ const STALE_DAYS = 30;
 export class CredentialsService {
   constructor(private readonly credentialsRepo: CredentialsRepository) {}
 
-  async getCredentialsForUser(userId: number) {
+  async getCredentialsForUser(userId: number): Promise<CredentialResponseDto[]> {
     const creds = await this.credentialsRepo.getAllUserCredentialsById(userId);
     const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
 
