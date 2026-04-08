@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@calcom/prisma": ["./mocks/prisma.ts"],
+      "@calcom/lib/auth": ["./mocks/auth.ts"],
+      "next": ["./mocks/next.ts"]
+    }
+  },
+  "include": [
+    "./**/*",
+    "../restv1api/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
