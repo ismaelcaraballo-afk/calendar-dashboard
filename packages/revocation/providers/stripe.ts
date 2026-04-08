@@ -7,5 +7,5 @@ export async function revokeStripe(credential: { key: any }) {
   // No external HTTP call needed for Stripe.
   // Removing the credential row in the DB is sufficient to
   // disconnect the integration — the key simply stops being used.
-  console.log("[revocation] revokeStripe: Stripe credential disconnected (local only, no HTTP call)");
+  console.log("[revocation][stripe] Stripe credential disconnected (local only, no HTTP call)");
 }

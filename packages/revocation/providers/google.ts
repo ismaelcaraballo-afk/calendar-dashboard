@@ -3,28 +3,29 @@
 // to invalidate the token on their end.
 
 export async function revokeGoogle(credential: { key: any }) {
-  const accessToken = credential.key?.access_token;
+  const token = credential?.key?.access_token;
 
-  if (!accessToken) {
-    console.warn("[revocation] revokeGoogle: no access_token found in key, skipping remote call");
+  if (!token) {
+    console.warn("[revocation][google] missing access_token; skipping remote revoke");
     return;
   }
 
   try {
-    const response = await fetch(
-      `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(accessToken)}`,
-      { method: "POST" }
+    const res = await fetch(
+      `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      }
     );
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => "(unreadable)");
-      console.error(
-        `[revocation] revokeGoogle: Google returned ${response.status} — ${body}`
-      );
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(unreadable)");
+      console.error(`[revocation][google] revoke failed ${res.status}: ${body}`);
     }
   } catch (err) {
     // Network errors, DNS failures, etc. — log but don't throw.
     // The local credential row will still be deleted by the caller.
-    console.error("[revocation] revokeGoogle: fetch failed:", err);
+    console.error("[revocation][google] error calling revoke endpoint:", err);
   }
 }

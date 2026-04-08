@@ -18,24 +18,19 @@ export class CredentialsService {
   async getCredentialsForUser(userId: number): Promise<CredentialResponseDto[]> {
     const credentials = await this.prisma.credential.findMany({
       where: { userId },
-      select: {
-        id: true,
-        type: true,
-        appId: true,
-        lastUsedAt: true,
-      },
+      select: { id: true, type: true, appId: true, lastUsedAt: true },
+      orderBy: { id: "asc" },
     });
 
-    const staleThreshold = new Date();
-    staleThreshold.setDate(staleThreshold.getDate() - STALE_DAYS);
+    const cutoff = new Date(Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000);
 
     return credentials.map((c) => ({
       id: c.id,
       type: c.type,
-      appId: c.appId,
-      lastUsedAt: c.lastUsedAt,
+      appId: c.appId ?? null,
+      lastUsedAt: c.lastUsedAt ?? null,
       // Stale if never used, or last used more than STALE_DAYS ago
-      isStale: c.lastUsedAt === null || c.lastUsedAt < staleThreshold,
+      isStale: !c.lastUsedAt || c.lastUsedAt < cutoff,
     }));
   }
 
