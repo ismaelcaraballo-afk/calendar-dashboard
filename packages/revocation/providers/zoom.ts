@@ -1,11 +1,15 @@
 // Member 4: External Services — Zoom revocation
 // Tells Zoom to invalidate the OAuth token when a user disconnects.
+// NOTE: This function throws on failure so the service layer can apply
+// graceful degradation (log + force local delete) when the provider is down.
 
-export async function revokeZoom(credential: { key: any }) {
-  const token = credential?.key?.access_token;
+import { revocationLogger } from "../logger";
+
+export async function revokeZoom(credential: { key: Record<string, unknown> }): Promise<void> {
+  const token = (credential?.key?.access_token as string) ?? null;
 
   if (!token) {
-    console.warn("[revocation][zoom] missing access_token; skipping remote revoke");
+    revocationLogger.warn("[revocation][zoom] missing access_token; skipping remote revoke");
     return;
   }
 
@@ -13,11 +17,14 @@ export async function revokeZoom(credential: { key: any }) {
   const clientSecret = process.env.ZOOM_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.warn("[revocation][zoom] missing client credentials; skipping remote revoke");
+    revocationLogger.warn("[revocation][zoom] missing client credentials; skipping remote revoke");
     return;
   }
 
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
     const res = await fetch(
@@ -25,15 +32,15 @@ export async function revokeZoom(credential: { key: any }) {
       {
         method: "POST",
         headers: { Authorization: `Basic ${basic}` },
+        signal: controller.signal,
       }
     );
 
     if (!res.ok) {
       const body = await res.text().catch(() => "(unreadable)");
-      console.error(`[revocation][zoom] revoke failed ${res.status}: ${body}`);
+      throw new Error(`Zoom revoke failed ${res.status}: ${body}`);
     }
-  } catch (err) {
-    // Same error-tolerant pattern as google.ts — log, don't throw.
-    console.error("[revocation][zoom] error calling revoke endpoint:", err);
+  } finally {
+    clearTimeout(timeout);
   }
 }

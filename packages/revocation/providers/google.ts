@@ -1,14 +1,21 @@
 // Member 4: External Services — Google revocation
 // When a Google credential is deleted, we must also tell Google
 // to invalidate the token on their end.
+// NOTE: This function throws on failure so the service layer can apply
+// graceful degradation (log + force local delete) when the provider is down.
 
-export async function revokeGoogle(credential: { key: any }) {
-  const token = credential?.key?.access_token;
+import { revocationLogger } from "../logger";
+
+export async function revokeGoogle(credential: { key: Record<string, unknown> }): Promise<void> {
+  const token = (credential?.key?.access_token as string) ?? null;
 
   if (!token) {
-    console.warn("[revocation][google] missing access_token; skipping remote revoke");
+    revocationLogger.warn("[revocation][google] missing access_token; skipping remote revoke");
     return;
   }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
 
   try {
     const res = await fetch(
@@ -16,16 +23,15 @@ export async function revokeGoogle(credential: { key: any }) {
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        signal: controller.signal,
       }
     );
 
     if (!res.ok) {
       const body = await res.text().catch(() => "(unreadable)");
-      console.error(`[revocation][google] revoke failed ${res.status}: ${body}`);
+      throw new Error(`Google revoke failed ${res.status}: ${body}`);
     }
-  } catch (err) {
-    // Network errors, DNS failures, etc. — log but don't throw.
-    // The local credential row will still be deleted by the caller.
-    console.error("[revocation][google] error calling revoke endpoint:", err);
+  } finally {
+    clearTimeout(timeout);
   }
 }

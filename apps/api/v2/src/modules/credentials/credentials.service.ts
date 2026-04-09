@@ -1,9 +1,13 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { CredentialsRepository } from "./credentials.repository";
-import { revokeCredential } from "@calcom/revocation/providers";
+import { revokeCredential as callProviderRevocation } from "@calcom/revocation/providers";
 import type { CredentialResponseDto } from "./dto/credential-response.dto";
 
-const STALE_DAYS = 30;
+// How many days without use before a credential is considered stale.
+// Override via CREDENTIAL_STALE_DAYS env variable.
+const STALE_DAYS = process.env.CREDENTIAL_STALE_DAYS
+  ? parseInt(process.env.CREDENTIAL_STALE_DAYS, 10)
+  : 30;
 
 interface CredentialRow {
   id: number;
@@ -18,7 +22,7 @@ export class CredentialsService {
 
   constructor(private readonly credentialsRepo: CredentialsRepository) {}
 
-  // Member 2: GET /api/v2/credentials
+  // Member 2: GET /credentials
   // Returns all connected app credentials for the authenticated user,
   // with a computed isStale flag indicating connection health.
   async getCredentialsForUser(userId: number): Promise<CredentialResponseDto[]> {
@@ -37,20 +41,22 @@ export class CredentialsService {
     });
   }
 
-  // Member 3: DELETE /api/v2/credentials/:id
+  // Member 3: DELETE /credentials/:id
   // Revokes a connected app: verifies ownership, calls provider revocation,
   // then removes the credential row from the database.
+  // Graceful degradation: if the provider is down, we still delete locally
+  // so the user is never permanently stuck with a broken connection.
   async revokeCredential(credentialId: number, userId: number) {
     const credential = await this.credentialsRepo.findCredentialByIdAndUserId(credentialId, userId);
     if (!credential) throw new NotFoundException("Credential not found");
 
     try {
-      await revokeCredential(credential);
+      await callProviderRevocation(credential);
     } catch (providerError) {
       // Provider is down or refused — log but don't block local cleanup.
-      // The user should never be trapped by external downtime.
+      const message = providerError instanceof Error ? providerError.message : String(providerError);
       this.logger.warn(
-        `Provider revocation failed for credential ${credentialId} — forcing local delete anyway: ${providerError}`
+        `Provider revocation failed for credential ${credentialId} (user ${userId}) — forcing local delete anyway: ${message}`
       );
     }
 

@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import { CredentialsService } from "./credentials.service";
 import type { CredentialsRepository } from "./credentials.repository";
-import { revokeCredential } from "@calcom/revocation/providers";
+import { revokeCredential as callProviderRevocation } from "@calcom/revocation/providers";
 
 jest.mock("@calcom/revocation/providers", () => ({
   revokeCredential: jest.fn(),
@@ -61,7 +61,7 @@ describe("CredentialsService", () => {
 
     await service.revokeCredential(7, 99);
 
-    expect(revokeCredential).toHaveBeenCalledWith(
+    expect(callProviderRevocation).toHaveBeenCalledWith(
       expect.objectContaining({ id: 7, type: "google_calendar" })
     );
     expect(repo.deleteUserCredentialById).toHaveBeenCalledWith(99, 7);
@@ -79,7 +79,7 @@ describe("CredentialsService", () => {
       type: "google_calendar",
       key: { access_token: "tok" },
     } as unknown as Awaited<ReturnType<CredentialsRepository["findCredentialByIdAndUserId"]>>);
-    (revokeCredential as jest.Mock).mockRejectedValue(new Error("Google 503"));
+    (callProviderRevocation as jest.Mock).mockRejectedValue(new Error("Google 503"));
     repo.deleteUserCredentialById.mockResolvedValue(undefined as never);
 
     // Should not throw — graceful degradation
@@ -90,5 +90,25 @@ describe("CredentialsService", () => {
 
     // Local delete must still happen even though provider failed
     expect(repo.deleteUserCredentialById).toHaveBeenCalledWith(1, 5);
+  });
+
+  it("marks credential used just before cutoff as fresh", async () => {
+    // 1ms before the stale threshold — should NOT be stale
+    const justFresh = new Date(Date.now() - (30 * 24 * 60 * 60 * 1000 - 1));
+    repo.getAllUserCredentialsById.mockResolvedValue([
+      { id: 3, type: "zoom_video", appId: "zoom", lastUsedAt: justFresh },
+    ] as unknown as Awaited<ReturnType<CredentialsRepository["getAllUserCredentialsById"]>>);
+
+    const result = await service.getCredentialsForUser(1);
+    expect(result[0].isStale).toBe(false);
+  });
+
+  it("returns empty array when user has no credentials", async () => {
+    repo.getAllUserCredentialsById.mockResolvedValue(
+      [] as unknown as Awaited<ReturnType<CredentialsRepository["getAllUserCredentialsById"]>>
+    );
+
+    const result = await service.getCredentialsForUser(1);
+    expect(result).toEqual([]);
   });
 });
